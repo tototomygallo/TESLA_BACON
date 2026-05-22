@@ -32,15 +32,30 @@ def _fmt_fecha_corta(fecha_str: str) -> str:
     return f"{d}-{m}-{y}"
 
 
-def generar_informe_pdf(muestra: Muestra) -> bytes:
+def generar_informe_pdf(muestra: Muestra, validacion_clinica: bool = True) -> bytes:
     """
-    Genera el PDF del informe de una muestra completada.
+    Genera el PDF del informe de una muestra completada o anulada.
     Retorna los bytes del PDF.
     """
     if muestra.resultado_test_value is None:
         raise ValueError("La muestra no tiene resultados cargados")
 
     resultado_texto = "Positivo" if muestra.resultado_test_value > 5 else "Negativo"
+    if not validacion_clinica:
+        resultado_texto = "No concluyente"
+    post_delta_texto = (
+        f"{muestra.resultado_post_delta:.1f}"
+        if muestra.resultado_post_delta is not None
+        else ""
+    )
+    if not validacion_clinica:
+        post_delta_texto = (
+            "Resultado no valuable, equipo arroja error durante la lectura. "
+            "Prueba no concluyente. No es posible determinar la presencia o "
+            "ausencia de H pylori debido a falla técnica en la medición post "
+            "30 minutos. Se recomienda repetir el estudio siguiendo todas las "
+            "indicaciones."
+        )
     paciente_nombre = f"{muestra.paciente_apellido} {muestra.paciente_nombre}".upper()
     fecha_ingreso = muestra.fecha_ingreso.strftime("%Y-%m-%d %H:%M") if muestra.fecha_ingreso else ""
 
@@ -95,7 +110,15 @@ def generar_informe_pdf(muestra: Muestra) -> bytes:
     pdf.set_font("Helvetica", "", 10)
     y += 5
 
-    # Fila 3: DNI
+    # Fila 3: Solicitante
+    pdf.set_xy(margin_l, y)
+    pdf.cell(0, 5, "Solicitado por:", new_x="END")
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 5, "LABORATORIOS BACON SAIC")
+    pdf.set_font("Helvetica", "", 10)
+    y += 5
+
+    # Fila 4: DNI
     pdf.set_xy(margin_l, y)
     pdf.cell(0, 5, "Documento:", new_x="END")
     pdf.set_font("Helvetica", "B", 10)
@@ -126,7 +149,7 @@ def generar_informe_pdf(muestra: Muestra) -> bytes:
     pdf.cell(20, 4, "Unidad")
     pdf.set_xy(page_w - margin_r - 45, y)
     pdf.cell(45, 4, "Valores de Referencia", align="R")
-    y += 2
+    y += 5
 
     pdf.line(margin_l, y, page_w - margin_r, y)
     y += 8
@@ -150,7 +173,7 @@ def generar_informe_pdf(muestra: Muestra) -> bytes:
         ("Código TAUKIT", muestra.codigo_taukit, True),
         ("Fecha de toma de muestra", _fmt_fecha_corta(muestra.fecha_toma_muestra), False),
         ("Valor de lectura basal", f"{muestra.resultado_basal_delta:.1f}" if muestra.resultado_basal_delta is not None else "", False),
-        ("Valor de lectura post 30 minut", f"{muestra.resultado_post_delta:.1f}" if muestra.resultado_post_delta is not None else "", False),
+        ("Valor de lectura post 30 minut", post_delta_texto, False),
     ]
 
     pdf.set_font("Helvetica", "", 10)
@@ -159,16 +182,20 @@ def generar_informe_pdf(muestra: Muestra) -> bytes:
         pdf.cell(0, 5, label)
         pdf.set_font("Helvetica", "B" if bold else "", 10)
         pdf.set_xy(col_valor, y)
-        pdf.cell(0, 5, valor)
+        if not validacion_clinica and label == "Valor de lectura post 30 minut":
+            pdf.multi_cell(36, 3.2, valor, align="C")
+            y = max(y + 5.5, pdf.get_y())
+        else:
+            pdf.cell(0, 5, valor)
+            y += 5.5
         pdf.set_font("Helvetica", "", 10)
-        y += 5.5
 
     # Incremento sobre basal + valores de referencia
     pdf.set_xy(margin_l, y)
     pdf.cell(0, 5, "Incremento sobre basal")
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_xy(col_valor, y)
-    pdf.cell(0, 5, str(muestra.resultado_test_value))
+    pdf.cell(0, 5, "" if not validacion_clinica else str(muestra.resultado_test_value))
     pdf.set_font("Helvetica", "", 9)
     pdf.set_xy(page_w - margin_r - 45, y)
     pdf.cell(45, 4, "Hasta 5 : Negativo", align="R")
@@ -191,14 +218,24 @@ def generar_informe_pdf(muestra: Muestra) -> bytes:
     pdf.set_xy(margin_l, y)
     pdf.cell(0, 4, f"Muestra recibida: {fecha_ingreso}")
 
+    if not validacion_clinica:
+        pdf.set_text_color(170, 170, 170)
+        pdf.set_font("Helvetica", "", 22)
+        pdf.set_xy(42, 198)
+        pdf.cell(126, 8, "INFORME SIN VALIDACIÓN CLÍNICA", align="C")
+        pdf.set_text_color(0, 0, 0)
+
     # ============================================
     # PIE
     # ============================================
+    if not validacion_clinica:
+        return bytes(pdf.output())
+
     footer_line_y = 272
 
     # Firma
     if os.path.exists(FIRMA_IMG):
-        pdf.image(FIRMA_IMG, x=page_w - margin_r - 42, y=footer_line_y - 48, w=40)
+        pdf.image(FIRMA_IMG, x=page_w - margin_r - 45, y=footer_line_y - 30, w=35)
 
     pdf.set_draw_color(0)
     pdf.set_line_width(0.3)

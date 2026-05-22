@@ -35,6 +35,9 @@ class Usuario(Base):
 
     active = Column(Boolean, nullable=False)
 
+    password_changed_at = Column(DateTime)
+    force_password_change = Column(Boolean, nullable=False, default=False)
+
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 

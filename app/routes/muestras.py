@@ -77,11 +77,15 @@ def descargar_pdf(protocolo: str, db: Session = Depends(get_db)):
     if muestra.resultado_test_value is None:
         raise HTTPException(status_code=422, detail="La muestra no tiene resultados cargados")
     try:
-        pdf_bytes = generar_informe_pdf(muestra)
+        validacion_clinica = muestra.estado != "anulado"
+        pdf_bytes = generar_informe_pdf(
+            muestra,
+            validacion_clinica=validacion_clinica,
+        )
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'inline; filename="informe-{protocolo}.pdf"'},
+            headers={"Content-Disposition": f'attachment; filename="informe-{protocolo}.pdf"'},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

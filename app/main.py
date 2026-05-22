@@ -1,23 +1,26 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import SessionLocal
 from app.models import Usuario
-from app.routes import auth, bacon_proxy, muestras, resumen
+from app.routes import auth, bacon_proxy, configuracion, muestras, resumen
 from app.services.bacon_retry import reintentar_pendientes
+from app.services.discrepancias import eliminar_discrepancias_vencidas
 
 RETRY_INTERVAL_SECONDS = 300  # 5 minutos
 
 
 async def _bacon_retry_loop():
-    """Tarea en segundo plano: cada 5 minutos reintenta notificar a BACON."""
+    """Tarea en segundo plano: reintentos BACON y limpieza de discrepancias."""
     while True:
         await asyncio.sleep(RETRY_INTERVAL_SECONDS)
         db = SessionLocal()
         try:
+            eliminar_discrepancias_vencidas(db)
             resultado = await reintentar_pendientes(db)
             if resultado["total"] > 0:
                 print(
@@ -33,9 +36,8 @@ async def _bacon_retry_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup y shutdown de la app."""
-    #init_db()
     _seed_usuarios()
-    # Lanzar tarea de reintento en segundo plano
+    _limpiar_discrepancias_vencidas()
     task = asyncio.create_task(_bacon_retry_loop())
     yield
     task.cancel()
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="TauKits API",
-    description="Backend para el sistema de gestión de muestras TauKits — Tesla Diagnóstico / BACON",
+    description="Backend para el sistema de gestion de muestras TauKits - Tesla Diagnostico / BACON",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -58,6 +60,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(bacon_proxy.router, prefix="/api")
+app.include_router(configuracion.router, prefix="/api")
 app.include_router(muestras.router, prefix="/api")
 app.include_router(resumen.router, prefix="/api")
 
@@ -67,16 +70,98 @@ def _seed_usuarios():
     try:
         if db.query(Usuario).count() > 0:
             return
+
+        ahora = datetime.now()
         usuarios = [
-            Usuario(id="tec1", nombre="María López", clave="tec1", rol="tecnico"),
-            Usuario(id="tec2", nombre="Juan Pérez", clave="tec2", rol="tecnico"),
-            Usuario(id="bio1", nombre="Dra. Ana García", clave="bio1", rol="bioquimico"),
-            Usuario(id="bio2", nombre="Dr. Carlos Ruiz", clave="bio2", rol="bioquimico"),
-            Usuario(id="adm1", nombre="Laura Martínez", clave="adm1", rol="admin"),
-            Usuario(id="adm2", nombre="Roberto Silva", clave="adm2", rol="admin"),
+            Usuario(
+                id="tec1",
+                username="tec1",
+                name="Maria Lopez",
+                email="tec1@tesla.local",
+                password_hash=auth.hash_password("tec1"),
+                rol="tecnico",
+                active=True,
+                password_changed_at=ahora,
+                force_password_change=False,
+                created_at=ahora,
+                updated_at=ahora,
+            ),
+            Usuario(
+                id="tec2",
+                username="tec2",
+                name="Juan Perez",
+                email="tec2@tesla.local",
+                password_hash=auth.hash_password("tec2"),
+                rol="tecnico",
+                active=True,
+                password_changed_at=ahora,
+                force_password_change=False,
+                created_at=ahora,
+                updated_at=ahora,
+            ),
+            Usuario(
+                id="bio1",
+                username="bio1",
+                name="Dra. Ana Garcia",
+                email="bio1@tesla.local",
+                password_hash=auth.hash_password("bio1"),
+                rol="bioquimico",
+                active=True,
+                password_changed_at=ahora,
+                force_password_change=False,
+                created_at=ahora,
+                updated_at=ahora,
+            ),
+            Usuario(
+                id="bio2",
+                username="bio2",
+                name="Dr. Carlos Ruiz",
+                email="bio2@tesla.local",
+                password_hash=auth.hash_password("bio2"),
+                rol="bioquimico",
+                active=True,
+                password_changed_at=ahora,
+                force_password_change=False,
+                created_at=ahora,
+                updated_at=ahora,
+            ),
+            Usuario(
+                id="adm1",
+                username="adm1",
+                name="Laura Martinez",
+                email="adm1@tesla.local",
+                password_hash=auth.hash_password("adm1"),
+                rol="admin",
+                active=True,
+                password_changed_at=ahora,
+                force_password_change=False,
+                created_at=ahora,
+                updated_at=ahora,
+            ),
+            Usuario(
+                id="adm2",
+                username="adm2",
+                name="Roberto Silva",
+                email="adm2@tesla.local",
+                password_hash=auth.hash_password("adm2"),
+                rol="admin",
+                active=True,
+                password_changed_at=ahora,
+                force_password_change=False,
+                created_at=ahora,
+                updated_at=ahora,
+            ),
         ]
         db.add_all(usuarios)
         db.commit()
+    finally:
+        db.close()
+
+
+def _limpiar_discrepancias_vencidas():
+    db = SessionLocal()
+    try:
+        eliminar_discrepancias_vencidas(db)
     finally:
         db.close()
 
