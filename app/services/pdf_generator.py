@@ -42,7 +42,7 @@ def generar_informe_pdf(muestra: Muestra, validacion_clinica: bool = True) -> by
 
     resultado_texto = "Positivo" if muestra.resultado_test_value > 5 else "Negativo"
     if not validacion_clinica:
-        resultado_texto = "No concluyente"
+        resultado_texto = "Se sugiere repetir el estudio"
     post_delta_texto = (
         f"{muestra.resultado_post_delta:.1f}"
         if muestra.resultado_post_delta is not None
@@ -50,11 +50,7 @@ def generar_informe_pdf(muestra: Muestra, validacion_clinica: bool = True) -> by
     )
     if not validacion_clinica:
         post_delta_texto = (
-            "Resultado no valuable, equipo arroja error durante la lectura. "
-            "Prueba no concluyente. No es posible determinar la presencia o "
-            "ausencia de H pylori debido a falla técnica en la medición post "
-            "30 minutos. Se recomienda repetir el estudio siguiendo todas las "
-            "indicaciones."
+            "Resultado no valorable"
         )
     paciente_nombre = f"{muestra.paciente_apellido} {muestra.paciente_nombre}".upper()
     fecha_ingreso = muestra.fecha_ingreso.strftime("%Y-%m-%d %H:%M") if muestra.fecha_ingreso else ""
@@ -195,7 +191,7 @@ def generar_informe_pdf(muestra: Muestra, validacion_clinica: bool = True) -> by
     pdf.cell(0, 5, "Incremento sobre basal")
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_xy(col_valor, y)
-    pdf.cell(0, 5, "" if not validacion_clinica else str(muestra.resultado_test_value))
+    pdf.cell(0, 5, "No concluyente" if not validacion_clinica else str(muestra.resultado_test_value))
     pdf.set_font("Helvetica", "", 9)
     pdf.set_xy(page_w - margin_r - 45, y)
     pdf.cell(45, 4, "Hasta 5 : Negativo", align="R")
